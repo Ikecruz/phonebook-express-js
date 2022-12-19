@@ -1,5 +1,7 @@
 const express = require('express')
+const { start } = require('./config/db')
 const app = express()
+require('dotenv').config()
 
 const PORT = 8080
 
@@ -25,6 +27,8 @@ let contacts = [
       "number": "39-23-6423122"
     }
 ]
+
+start()
 
 const uid = function(){
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
