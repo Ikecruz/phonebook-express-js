@@ -1,38 +1,13 @@
 const express = require('express')
 const { start } = require('./config/db')
+const Contact = require('./models/contact')
 const app = express()
+
 require('dotenv').config()
 
 const PORT = 8080
 
-let contacts = [
-    { 
-      "id": 1,
-      "name": "Arto Hellas", 
-      "number": "040-123456"
-    },
-    { 
-      "id": 2,
-      "name": "Ada Lovelace", 
-      "number": "39-44-5323523"
-    },
-    { 
-      "id": 3,
-      "name": "Dan Abramov", 
-      "number": "12-43-234345"
-    },
-    { 
-      "id": 4,
-      "name": "Mary Poppendieck", 
-      "number": "39-23-6423122"
-    }
-]
-
 start()
-
-const uid = function(){
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
 
 app.use(express.json())
 
@@ -40,8 +15,8 @@ app.get('/', (req, res) => {
     res.status(200).send('Welcome to PhoneBook API')
 })
 
-app.get('/info', (req, res) => {
-    const contactCounts = contacts.length
+app.get('/info', async (req, res) => {
+    let contactCounts = await Contact.count({})
     const requestTime = (new Date()).toUTCString()
 
     res.status(200).send(
@@ -52,13 +27,14 @@ app.get('/info', (req, res) => {
     )
 })
 
-app.get('/api/persons', (req, res) => {
+app.get('/api/persons', async (req, res) => {
+    const contacts = await Contact.find({})
     res.status(200).send(contacts)
 })
 
-app.get('/api/persons/:id', (req, res) => {
+app.get('/api/persons/:id', async (req, res) => {
     const { id } = req.params
-    const contact = contacts.find( cont => cont.id == id)
+    const contact = await Contact.findById(id)
 
     if (contact) {
         res.status(200).send(contact)
@@ -67,20 +43,21 @@ app.get('/api/persons/:id', (req, res) => {
     }
 })
 
-app.delete('/api/persons/:id', (req, res) => {
+app.delete('/api/persons/:id', async (req, res) => {
     const { id  } = req.params
-    const contact = contacts.find( cont => cont.id == id)
-    
+    const contact = await Contact.findById(id)
+
     if (contact) {
-        contacts = contacts.filter(cont => cont.id != id)
-        res.status(200).send({message: "Contact deleted"})
-    } else{
+        await Contact.deleteOne({ _id: id })
+        res.status(200).send(contact)
+    }
+    else {
         res.status(400).send({error: "No contact found"})
     }
 
 })
 
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', async (req, res) => {
 
     const { name, number } = req.body
 
@@ -88,16 +65,46 @@ app.post('/api/persons', (req, res) => {
         res.status(400).send({error: 'Invalid request body'})
     } else {
 
-        const contact = contacts.find( cont => cont.name == name)
+        const nameExists = await Contact.findOne({ name: name })
+        const numberExists = await Contact.findOne({ number: number })
 
-        if (contact) {
-            res.status(400).send({error: 'Name already exists'})
-        } else{
-            const newContact = { ...req.body, id: uid() }
-            contacts.push(newContact)
-            res.status(200).send({message: 'Contact added'})
+        if (nameExists || numberExists) {
+            res.status(400).send({error: 'Contact with Name or Number already exists'})
+            return
         }
 
+        await Contact.create({ name, number })
+        res.status(200).send({message: 'Contact added'})
+    }
+
+})
+
+app.patch('/api/persons/:id', async (req, res) => {
+
+    const { id } = req.params
+
+    const { name, number } = req.body
+    const contact = await Contact.findById(id)
+
+    if (!contact) {
+        res.status(400).send({error: "No contact found"})
+        return
+    }
+
+    if (!name || !number){
+        res.status(400).send({error: 'Invalid request body'})
+    } else {
+
+        const nameExists = await Contact.findOne({ name: name, _id: {$ne: id} })
+        const numberExists = await Contact.findOne({ number: number,  _id: {$ne: id} })
+
+        if (nameExists || numberExists) {
+            res.status(400).send({error: 'Contact with Name or Number already exists'})
+            return
+        }
+
+        await Contact.updateOne( {_id: id} ,{ name, number })
+        res.status(200).send({message: 'Contact updated'})
     }
 
 })
